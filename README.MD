@@ -1,2 +1,3 @@
 # chat
-This is a chat app
+This is a Isa's first chat app
+
