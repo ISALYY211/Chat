@@ -3,11 +3,21 @@ import sys
 import threading
 import time
 
+PLATFORM = "unknown"
 try:
     import msvcrt
-    HAS_MSVCRT = True
+    PLATFORM = "windows"
 except ImportError:
-    HAS_MSVCRT = False
+    pass
+
+if PLATFORM != "windows":
+    try:
+        import tty
+        import termios
+        import select
+        PLATFORM = "unix"
+    except ImportError:
+        pass
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 12345
@@ -98,8 +108,55 @@ def input_loop_windows(sock: socket.socket):
             time.sleep(0.01)
 
 
+def input_loop_unix(sock: socket.socket):
+    """Character-by-character input loop (macOS/Linux) with typing signals."""
+    old_settings = termios.tcgetattr(sys.stdin)
+    try:
+        tty.setcbreak(sys.stdin.fileno())
+        buffer = ""
+        is_typing = False
+
+        while True:
+            if select.select([sys.stdin], [], [], 0.01)[0]:
+                char = sys.stdin.read(1)
+
+                if char in ("\r", "\n"):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    if buffer:
+                        if buffer.lower() == "/quit":
+                            return
+                        sock.sendall((buffer + "\n").encode())
+                        buffer = ""
+                    if is_typing:
+                        send_signal(sock, "STOPPED")
+                        is_typing = False
+
+                elif char in ("\x7f", "\x08"):  # Backspace (DEL on Mac, BS)
+                    if buffer:
+                        buffer = buffer[:-1]
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                    if not buffer and is_typing:
+                        send_signal(sock, "STOPPED")
+                        is_typing = False
+
+                elif char == "\x03":  # Ctrl+C
+                    raise KeyboardInterrupt
+
+                else:
+                    if not is_typing:
+                        send_signal(sock, "TYPING")
+                        is_typing = True
+                    buffer += char
+                    sys.stdout.write(char)
+                    sys.stdout.flush()
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+
 def input_loop_fallback(sock: socket.socket):
-    """Line-based input fallback (no typing indicators on non-Windows)."""
+    """Line-based input fallback (no typing indicators)."""
     while True:
         message = input()
         if message.lower() == "/quit":
@@ -131,8 +188,10 @@ def main():
     receiver.start()
 
     try:
-        if HAS_MSVCRT:
+        if PLATFORM == "windows":
             input_loop_windows(sock)
+        elif PLATFORM == "unix":
+            input_loop_unix(sock)
         else:
             input_loop_fallback(sock)
     except (KeyboardInterrupt, EOFError):
