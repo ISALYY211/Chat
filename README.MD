@@ -1,24 +1,31 @@
 # Chat
 
-A simple TCP chat app built with Python sockets — for educational purposes.
+A simple chat app built with Python — for educational purposes.
 
-## How it works
+## Web version (recommended)
 
-- **`server.py`** listens on `127.0.0.1:12345` and relays messages between all connected clients.
-- **`client.py`** connects to the server, asks for a nickname, then lets you send and receive messages.
+Uses WebSockets and a browser-based UI.
 
-## Usage
-
-1. Start the server in one terminal:
+1. Start the server:
 
    ```
-   uv run server.py
+   uv run web_server.py
    ```
 
-2. In another terminal (or several), start a client:
+2. Open `http://localhost:8000` in a browser (or `http://YOUR_LAN_IP:8000` from other devices).
 
-   ```
-   uv run client.py
-   ```
+3. Pick a nickname and start chatting.
 
-3. Type a nickname when prompted, then start chatting. Type `/quit` to disconnect.
+Features: chat messages, join/leave notifications, and timing-based typing indicators.
+
+## Terminal version
+
+Uses raw TCP sockets and a terminal-based client.
+
+- **`server.py`** — TCP server on port 12345
+- **`client.py`** — terminal client with typing indicators (Windows + macOS/Linux)
+
+```
+uv run server.py          # terminal 1
+uv run client.py          # terminal 2+
+```

@@ -1,6 +1,6 @@
 [project]
 name = "chat"
 version = "0.1.0"
-description = "A simple TCP chat app for educational purposes"
+description = "A simple chat app for educational purposes"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["websockets"]
