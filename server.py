@@ -4,6 +4,8 @@ import threading
 HOST = "0.0.0.0"
 PORT = 12345
 
+SIGNAL_PREFIX = "\x01"
+
 clients: list[socket.socket] = []
 lock = threading.Lock()
 
@@ -34,15 +36,31 @@ def handle_client(client: socket.socket, address: tuple[str, int]):
         nickname = f"{address[0]}:{address[1]}"
 
     broadcast(f"** {nickname} joined the chat **\n".encode(), sender=client)
+    print(f"    {nickname} ({address[0]}:{address[1]})")
 
+    buffer = ""
     try:
         while True:
             data = client.recv(4096)
             if not data:
                 break
-            message = f"{nickname}: {data.decode()}"
-            print(message, end="")
-            broadcast(message.encode(), sender=client)
+            buffer += data.decode()
+
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+
+                if line.startswith(SIGNAL_PREFIX):
+                    signal = line[len(SIGNAL_PREFIX):]
+                    if signal == "TYPING":
+                        print(f"  [{nickname} is typing...]")
+                        broadcast(f"{SIGNAL_PREFIX}TYPING:{nickname}\n".encode(), sender=client)
+                    elif signal == "STOPPED":
+                        print(f"  [{nickname} stopped typing]")
+                        broadcast(f"{SIGNAL_PREFIX}STOPPED:{nickname}\n".encode(), sender=client)
+                else:
+                    message = f"{nickname}: {line}\n"
+                    print(message, end="")
+                    broadcast(message.encode(), sender=client)
     except (OSError, ConnectionResetError):
         pass
     finally:
@@ -56,13 +74,17 @@ def handle_client(client: socket.socket, address: tuple[str, int]):
 def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.settimeout(1.0)
     server.bind((HOST, PORT))
     server.listen()
     print(f"Server listening on {HOST}:{PORT}")
 
     try:
         while True:
-            client, address = server.accept()
+            try:
+                client, address = server.accept()
+            except socket.timeout:
+                continue
             with lock:
                 clients.append(client)
             thread = threading.Thread(target=handle_client, args=(client, address), daemon=True)
